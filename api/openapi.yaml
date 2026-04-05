@@ -1,0 +1,227 @@
+openapi: 3.0.3
+info:
+  title: Recommendation Service
+  version: 0.1.0
+
+paths:
+  /instances/register:
+    post:
+      summary: Register a new instance and obtain a secret key
+      responses:
+        '201':
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceWithKey'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instances/{instanceId}/catalog:
+    post:
+      summary: Register catalog and existing user ratings
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstanceRegistration'
+      responses:
+        '200':
+          description: Catalog registered
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/InstanceNotFound'
+        '409':
+          description: Catalog already exists for this instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instances/{instanceId}/ratings:
+    put:
+      summary: Add or modify a user rating
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rating'
+      responses:
+        '200':
+          description: Rating saved
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/InstanceNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      summary: Delete a user rating
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingKey'
+      responses:
+        '204':
+          description: Rating deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/InstanceNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instances/{instanceId}/users/{userId}/recommendations:
+    get:
+      summary: Get recommendations for a user
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of recommended products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Instance or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  responses:
+    Unauthorized:
+      description: Secret key missing or mismatched
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InstanceNotFound:
+      description: Instance not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    instanceKey:
+      type: apiKey
+      in: header
+      name: X-Instance-Key
+
+  parameters:
+    instanceId:
+      name: instanceId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    InstanceRegistration:
+      type: object
+      required: [catalog, ratings]
+      properties:
+        catalog:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        ratings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rating'
+
+    InstanceWithKey:
+      type: object
+      properties:
+        instanceId:
+          type: string
+        secretKey:
+          type: string
+
+    Product:
+      type: object
+      required: [productId]
+      properties:
+        productId:
+          type: string
+        name:
+          type: string
+
+    Rating:
+      type: object
+      required: [userId, productId, score]
+      properties:
+        userId:
+          type: string
+        productId:
+          type: string
+        score:
+          type: number
+          format: float
+
+    RatingKey:
+      type: object
+      required: [userId, productId]
+      properties:
+        userId:
+          type: string
+        productId:
+          type: string
+
+    Recommendation:
+      type: object
+      properties:
+        productId:
+          type: string
+        score:
+          type: number
+          format: float
+
+    Error:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
