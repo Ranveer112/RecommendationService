@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, create_engine
+from sqlalchemy import Column, Integer, Index, String, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
@@ -24,12 +24,18 @@ class Product(Base):
 class Rating(Base):
     __tablename__ = "ratings"
 
+    id = Column(Integer, primary_key=True, autoincrement=True)
     product_id = Column(String, nullable=False)
     user_id = Column(String, nullable=False)
     score = Column(
         String, nullable=False
     )  # Using String to avoid float precision issues in SQLite; convert in app layer
     catalog_id = Column(String, nullable=False)
+    insertion_order = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index("idx_catalog_insertion_order", "catalog_id", "insertion_order"),
+    )
 
 
 # SQLite async engine
