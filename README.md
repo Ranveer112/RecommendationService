@@ -11,7 +11,7 @@
 
 **Problem statement:**
 
-You own/manage a marketplace and want recommendation in it. However, you do want to hire a ML
+You own/manage a marketplace and want recommendation in it. However, you do not want to hire a ML
 team to build it, and you want a solution that gets you 80% there with 10% of the effort.
 
 Welcome RecommendationService!
