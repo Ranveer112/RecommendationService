@@ -33,26 +33,43 @@ class InstanceRepository:
             return result.scalars().first()
 
     @staticmethod
-    async def get_total_ratings(catalog_id: str) -> int:
+    async def get_total_users(catalog_id: str) -> int:
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(func.count())
                 .select_from(DBRating)
-                .where(DBRating.c.catalog_id == catalog_id)
+                .where(DBRating.catalog_id == catalog_id)
             )
             result = await session.execute(stmt)
-            return result.scalar()
+            count = result.scalar()
+            return 0 if count is None else count
+
+    @staticmethod
+    async def get_total_products(catalog_id: str) -> int:
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(func.count())
+                .select_from(DBProduct)
+                .where(DBProduct.catalog_id == catalog_id)
+            )
+            result = await session.execute(stmt)
+            count = result.scalar()
+            return 0 if count is None else count
 
     @staticmethod
     async def has_catalog(instance_id: str) -> bool:
         async with AsyncSessionLocal() as session:
             result = await session.get(Instance, instance_id)
-            return result is not None and result.catalog_id is not None
+            if result is None:
+                return False
+            return result.catalog_id is not None
 
     @staticmethod
     async def assign_catalog(instance_id: str, catalog_id: str) -> None:
         async with AsyncSessionLocal() as session:
             instance = await session.get(Instance, instance_id)
+            if instance is None:
+                raise ValueError(f"Instance {instance_id} not found")
             instance.catalog_id = catalog_id
             await session.commit()
 

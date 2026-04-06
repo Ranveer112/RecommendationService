@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.dependencies import verify_instance_key
 from app.repositories import InstanceRepository

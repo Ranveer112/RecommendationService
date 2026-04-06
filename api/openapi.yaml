@@ -182,7 +182,7 @@ components:
 
     Product:
       type: object
-      required: [productId]
+      required: [productId, name]
       properties:
         productId:
           type: string

@@ -4,4 +4,3 @@ pydantic>=2.0.0
 sqlalchemy>=2.0.0
 aiosqlite>=0.20.0
 torch
-torch
