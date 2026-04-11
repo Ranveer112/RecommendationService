@@ -123,6 +123,129 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /instances/{instanceId}/products:
+    post:
+      summary: Create a new product
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/InstanceNotFound'
+        '409':
+          description: A product with this ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instances/{instanceId}/products/bulk:
+    post:
+      summary: Bulk-create products (all-or-nothing, max 2000)
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Product'
+              minItems: 1
+              maxItems: 2000
+      responses:
+        '201':
+          description: Bulk operation completed — created products and skipped duplicates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkProductResult'
+        '400':
+          description: Validation failed (e.g. exceeds 2000 items, invalid product data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/InstanceNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instances/{instanceId}/products/{productId}:
+    put:
+      summary: Update a product's name or categories
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/productId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Instance or product not found (see InstanceNotFound, ProductNotFound)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      summary: Delete a product and gracefully remove its associated ratings
+      security:
+        - instanceKey: []
+      parameters:
+        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/productId'
+      responses:
+        '204':
+          description: Product deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Instance or product not found (see InstanceNotFound, ProductNotFound)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   responses:
     Unauthorized:
@@ -133,6 +256,12 @@ components:
             $ref: '#/components/schemas/Error'
     InstanceNotFound:
       description: Instance not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ProductNotFound:
+      description: Product not found
       content:
         application/json:
           schema:
@@ -153,6 +282,12 @@ components:
   parameters:
     instanceId:
       name: instanceId
+      in: path
+      required: true
+      schema:
+        type: string
+    productId:
+      name: productId
       in: path
       required: true
       schema:
@@ -182,12 +317,50 @@ components:
 
     Product:
       type: object
-      required: [productId, name]
+      required: [productId, name, categories]
       properties:
         productId:
           type: string
         name:
           type: string
+        categories:
+          type: array
+          items:
+            type: string
+          minItems: 1
+
+    BulkProductResult:
+      type: object
+      required: [created, skipped]
+      properties:
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkSkippedProduct'
+
+    BulkSkippedProduct:
+      type: object
+      required: [productId, reason]
+      properties:
+        productId:
+          type: string
+        reason:
+          type: string
+
+    ProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+          minItems: 1
 
     Rating:
       type: object

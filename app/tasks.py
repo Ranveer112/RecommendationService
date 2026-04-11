@@ -37,6 +37,9 @@ async def process_catalog_registration(
     total_users = await InstanceRepository.get_total_users(catalog_id)
     total_products = await InstanceRepository.get_total_products(catalog_id)
 
+    if total_users == 0 or total_products == 0:
+        return
+
     user_latent_factors = torch.nn.Embedding(total_users, 5)
 
     product_latent_factors = torch.nn.Embedding(total_products, 5)
