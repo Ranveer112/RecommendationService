@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import Index, String
+from sqlalchemy import Index, JSON, String, ForeignKey, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -23,13 +23,16 @@ class Product(Base):
     product_id: Mapped[str] = mapped_column(String, primary_key=True)
     product_name: Mapped[str] = mapped_column(String)
     catalog_id: Mapped[str] = mapped_column(String)
+    categories: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 
 class Rating(Base):
     __tablename__ = "ratings"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    product_id: Mapped[str] = mapped_column(String)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.product_id", ondelete="CASCADE")
+    )
     user_id: Mapped[str] = mapped_column(String)
     score: Mapped[str] = mapped_column(
         String
@@ -44,6 +47,15 @@ class Rating(Base):
 
 # SQLite async engine
 engine = create_async_engine("sqlite+aiosqlite:///./recommendations.db", echo=False)
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 AsyncSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
