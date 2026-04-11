@@ -38,6 +38,34 @@ Retrieve quality metrics (e.g., RMSE, precision@k) for the current model.
 
 ---
 
+## Development
+
+### Running Tests
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ -v --cov=app --cov-report=term-missing
+```
+
+### CI/CD
+
+This project uses GitHub Actions for continuous integration:
+
+- **Triggers**: Push to `main`/`develop` branches, pull requests
+- **Matrix**: Tests run on Python 3.11, 3.12, and 3.13
+- **Coverage**: Generates coverage reports and uploads to Codecov
+- **Caching**: Pip dependencies are cached for faster builds
+
+The CI configuration is in `.github/workflows/ci.yml`.
+
+---
+
 ## Dependencies
 
 - FastAPI
@@ -46,3 +74,7 @@ Retrieve quality metrics (e.g., RMSE, precision@k) for the current model.
 - SQLAlchemy
 - aiosqlite
 - torch
+- pytest (dev)
+- pytest-asyncio (dev)
+- pytest-cov (dev)
+- httpx (dev)

@@ -1,4 +1,5 @@
 import asyncio
+from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -58,6 +59,15 @@ async def test_session(test_engine):
 
 
 @pytest_asyncio.fixture
+async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Direct access to the test database session for verification."""
+    import app.database as db_module
+
+    async with db_module.AsyncSessionLocal() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
 async def client():
     """Async test client that talks to the FastAPI app."""
     from app.main import app
@@ -78,7 +88,7 @@ async def registered_instance(client: AsyncClient):
 
 @pytest_asyncio.fixture
 async def instance_with_catalog(client: AsyncClient, registered_instance):
-    """Register an instance with a catalog and return (instanceId, secretKey)."""
+    """Register an instance with a catalog and return (instanceId, secretKey, catalogId)."""
     instance_id, secret_key = registered_instance
     resp = await client.post(
         f"/instances/{instance_id}/catalog",
@@ -95,4 +105,10 @@ async def instance_with_catalog(client: AsyncClient, registered_instance):
         headers={"X-Instance-Key": secret_key},
     )
     assert resp.status_code == 200
-    return instance_id, secret_key
+    # Get the catalog_id that was assigned
+    import app.database as db_module
+
+    async with db_module.AsyncSessionLocal() as session:
+        instance = await session.get(db_module.Instance, instance_id)
+        catalog_id = instance.catalog_id
+    return instance_id, secret_key, catalog_id
