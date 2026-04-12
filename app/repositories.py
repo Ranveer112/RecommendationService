@@ -1,25 +1,26 @@
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from app.database import (
     AsyncSessionLocal,
-    Instance,
+    Catalog,
     Product as DBProduct,
     Rating as DBRating,
 )
 from app.schemas import Product, ProductUpdate, Rating
 
 
-class InstanceRepository:
+class CatalogRepository:
     @staticmethod
-    async def create(instance_id: str, secret_key: str) -> None:
+    async def create(catalog_id: str, secret_key: str) -> None:
         async with AsyncSessionLocal() as session:
-            instance = Instance(instance_id=instance_id, secret_key=secret_key)
-            session.add(instance)
+            catalog = Catalog(catalog_id=catalog_id, secret_key=secret_key)
+            session.add(catalog)
             await session.commit()
 
     @staticmethod
-    async def get_by_id(instance_id: str) -> Instance | None:
+    async def get_by_id(catalog_id: str) -> Catalog | None:
         async with AsyncSessionLocal() as session:
-            result = await session.get(Instance, instance_id)
+            result = await session.get(Catalog, catalog_id)
             return result
 
     @staticmethod
@@ -57,44 +58,6 @@ class InstanceRepository:
             return 0 if count is None else count
 
     @staticmethod
-    async def has_catalog(instance_id: str) -> bool:
-        async with AsyncSessionLocal() as session:
-            result = await session.get(Instance, instance_id)
-            if result is None:
-                return False
-            return result.catalog_id is not None
-
-    @staticmethod
-    async def assign_catalog(instance_id: str, catalog_id: str) -> None:
-        async with AsyncSessionLocal() as session:
-            instance = await session.get(Instance, instance_id)
-            if instance is None:
-                raise ValueError(f"Instance {instance_id} not found")
-            instance.catalog_id = catalog_id
-            await session.commit()
-
-    @staticmethod
-    async def get_catalog_id(instance_id: str) -> str | None:
-        async with AsyncSessionLocal() as session:
-            instance = await session.get(Instance, instance_id)
-            if instance is None:
-                return None
-            return instance.catalog_id
-
-    @staticmethod
-    async def create_products(catalog_id: str, products: list[Product]) -> None:
-        async with AsyncSessionLocal() as session:
-            for product in products:
-                db_product = DBProduct(
-                    product_id=product.productId,
-                    product_name=product.name,
-                    catalog_id=catalog_id,
-                    categories=product.categories,
-                )
-                session.add(db_product)
-            await session.commit()
-
-    @staticmethod
     async def get_product(catalog_id: str, product_id: str) -> DBProduct | None:
         async with AsyncSessionLocal() as session:
             stmt = select(DBProduct).where(
@@ -105,7 +68,7 @@ class InstanceRepository:
             return result.scalars().first()
 
     @staticmethod
-    async def create_product(catalog_id: str, product: Product) -> DBProduct:
+    async def create_product(catalog_id: str, product: Product) -> DBProduct | None:
         async with AsyncSessionLocal() as session:
             db_product = DBProduct(
                 product_id=product.productId,
@@ -114,7 +77,10 @@ class InstanceRepository:
                 categories=product.categories,
             )
             session.add(db_product)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                return None
             await session.refresh(db_product)
             return db_product
 

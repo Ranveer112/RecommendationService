@@ -4,55 +4,26 @@ info:
   version: 0.1.0
 
 paths:
-  /instances/register:
+  /catalogs/register:
     post:
-      summary: Register a new instance and obtain a secret key
+      summary: Register a new catalog and obtain a secret key
       responses:
         '201':
-          description: Instance created
+          description: Catalog created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstanceWithKey'
+                $ref: '#/components/schemas/CatalogWithKey'
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /instances/{instanceId}/catalog:
-    post:
-      summary: Register catalog and existing user ratings
-      security:
-        - instanceKey: []
-      parameters:
-        - $ref: '#/components/parameters/instanceId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InstanceRegistration'
-      responses:
-        '200':
-          description: Catalog registered
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/InstanceNotFound'
-        '409':
-          description: Catalog already exists for this instance
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /instances/{instanceId}/ratings:
+  /catalogs/{catalogId}/ratings:
     put:
       summary: Add or modify a user rating
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
       requestBody:
         required: true
         content:
@@ -65,16 +36,20 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          $ref: '#/components/responses/InstanceNotFound'
+          description: Catalog or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           $ref: '#/components/responses/InternalError'
 
     delete:
       summary: Delete a user rating
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
       requestBody:
         required: true
         content:
@@ -87,17 +62,58 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          $ref: '#/components/responses/InstanceNotFound'
+          description: Catalog or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /instances/{instanceId}/users/{userId}/recommendations:
+  /catalogs/{catalogId}/ratings/bulk:
+    put:
+      summary: Bulk add or modify ratings (all-or-nothing, max 2000)
+      security:
+        - catalogKey: []
+      parameters:
+        - $ref: '#/components/parameters/catalogId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Rating'
+              minItems: 1
+              maxItems: 2000
+      responses:
+        '200':
+          description: Bulk operation completed — saved ratings and skipped failures
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkRatingResult'
+        '400':
+          description: Validation failed (e.g. exceeds 2000 items, invalid rating data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CatalogNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /catalogs/{catalogId}/users/{userId}/recommendations:
     get:
       summary: Get recommendations for a user
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
         - name: userId
           in: path
           required: true
@@ -115,7 +131,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Instance or user not found
+          description: Catalog or user not found
           content:
             application/json:
               schema:
@@ -123,13 +139,13 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /instances/{instanceId}/products:
+  /catalogs/{catalogId}/products:
     post:
       summary: Create a new product
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
       requestBody:
         required: true
         content:
@@ -146,7 +162,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          $ref: '#/components/responses/InstanceNotFound'
+          $ref: '#/components/responses/CatalogNotFound'
         '409':
           description: A product with this ID already exists
           content:
@@ -156,13 +172,13 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /instances/{instanceId}/products/bulk:
+  /catalogs/{catalogId}/products/bulk:
     post:
       summary: Bulk-create products (all-or-nothing, max 2000)
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
       requestBody:
         required: true
         content:
@@ -189,17 +205,17 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          $ref: '#/components/responses/InstanceNotFound'
+          $ref: '#/components/responses/CatalogNotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /instances/{instanceId}/products/{productId}:
+  /catalogs/{catalogId}/products/{productId}:
     put:
       summary: Update a product's name or categories
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
         - $ref: '#/components/parameters/productId'
       requestBody:
         required: true
@@ -217,7 +233,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Instance or product not found (see InstanceNotFound, ProductNotFound)
+          description: Catalog or product not found
           content:
             application/json:
               schema:
@@ -228,9 +244,9 @@ paths:
     delete:
       summary: Delete a product and gracefully remove its associated ratings
       security:
-        - instanceKey: []
+        - catalogKey: []
       parameters:
-        - $ref: '#/components/parameters/instanceId'
+        - $ref: '#/components/parameters/catalogId'
         - $ref: '#/components/parameters/productId'
       responses:
         '204':
@@ -238,7 +254,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
-          description: Instance or product not found (see InstanceNotFound, ProductNotFound)
+          description: Catalog or product not found
           content:
             application/json:
               schema:
@@ -254,8 +270,8 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    InstanceNotFound:
-      description: Instance not found
+    CatalogNotFound:
+      description: Catalog not found
       content:
         application/json:
           schema:
@@ -274,14 +290,14 @@ components:
             $ref: '#/components/schemas/Error'
 
   securitySchemes:
-    instanceKey:
+    catalogKey:
       type: apiKey
       in: header
-      name: X-Instance-Key
+      name: X-Catalog-Key
 
   parameters:
-    instanceId:
-      name: instanceId
+    catalogId:
+      name: catalogId
       in: path
       required: true
       schema:
@@ -294,23 +310,10 @@ components:
         type: string
 
   schemas:
-    InstanceRegistration:
-      type: object
-      required: [catalog, ratings]
-      properties:
-        catalog:
-          type: array
-          items:
-            $ref: '#/components/schemas/Product'
-        ratings:
-          type: array
-          items:
-            $ref: '#/components/schemas/Rating'
-
-    InstanceWithKey:
+    CatalogWithKey:
       type: object
       properties:
-        instanceId:
+        catalogId:
           type: string
         secretKey:
           type: string
@@ -346,6 +349,30 @@ components:
       type: object
       required: [productId, reason]
       properties:
+        productId:
+          type: string
+        reason:
+          type: string
+
+    BulkRatingResult:
+      type: object
+      required: [saved, skipped]
+      properties:
+        saved:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rating'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkSkippedRating'
+
+    BulkSkippedRating:
+      type: object
+      required: [userId, productId, reason]
+      properties:
+        userId:
+          type: string
         productId:
           type: string
         reason:

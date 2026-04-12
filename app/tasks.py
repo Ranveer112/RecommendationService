@@ -1,6 +1,6 @@
 import asyncio
 
-from app.repositories import InstanceRepository
+from app.repositories import CatalogRepository
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -15,7 +15,7 @@ class CatalogData(Dataset[tuple[list[str], float]]):
 
     def __getitem__(self, idx: int) -> tuple[list[str], float]:
         rating = asyncio.get_event_loop().run_until_complete(
-            InstanceRepository.get_rating_by_order(self.catalog_id, idx)
+            CatalogRepository.get_rating_by_order(self.catalog_id, idx)
         )
         if rating is None:
             raise IndexError(
@@ -25,7 +25,6 @@ class CatalogData(Dataset[tuple[list[str], float]]):
 
 
 async def process_catalog_registration(
-    instance_id: str,
     catalog_id: str,
 ) -> None:
     """Background task to process catalog registration (ML training, etc.)."""
@@ -34,8 +33,8 @@ async def process_catalog_registration(
 
     # Step 1 - get distinct product_ids and user_ids
 
-    total_users = await InstanceRepository.get_total_users(catalog_id)
-    total_products = await InstanceRepository.get_total_products(catalog_id)
+    total_users = await CatalogRepository.get_total_users(catalog_id)
+    total_products = await CatalogRepository.get_total_products(catalog_id)
 
     if total_users == 0 or total_products == 0:
         return

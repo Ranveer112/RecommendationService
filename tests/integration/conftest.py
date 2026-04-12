@@ -78,37 +78,26 @@ async def client():
 
 
 @pytest_asyncio.fixture
-async def registered_instance(client: AsyncClient):
-    """Register an instance and return (instanceId, secretKey)."""
-    resp = await client.post("/instances/register")
+async def registered_catalog(client: AsyncClient):
+    """Register a catalog and return (catalogId, secretKey)."""
+    resp = await client.post("/catalogs/register")
     assert resp.status_code == 201
     data = resp.json()
-    return data["instanceId"], data["secretKey"]
+    return data["catalogId"], data["secretKey"]
 
 
 @pytest_asyncio.fixture
-async def instance_with_catalog(client: AsyncClient, registered_instance):
-    """Register an instance with a catalog and return (instanceId, secretKey, catalogId)."""
-    instance_id, secret_key = registered_instance
+async def catalog_with_product(client: AsyncClient, registered_catalog):
+    """Register a catalog with a seed product and return (catalogId, secretKey)."""
+    catalog_id, secret_key = registered_catalog
     resp = await client.post(
-        f"/instances/{instance_id}/catalog",
+        f"/catalogs/{catalog_id}/products",
         json={
-            "catalog": [
-                {
-                    "productId": "seed-1",
-                    "name": "Seed Product",
-                    "categories": ["cat-a"],
-                },
-            ],
-            "ratings": [],
+            "productId": "seed-1",
+            "name": "Seed Product",
+            "categories": ["cat-a"],
         },
-        headers={"X-Instance-Key": secret_key},
+        headers={"X-Catalog-Key": secret_key},
     )
-    assert resp.status_code == 200
-    # Get the catalog_id that was assigned
-    import app.database as db_module
-
-    async with db_module.AsyncSessionLocal() as session:
-        instance = await session.get(db_module.Instance, instance_id)
-        catalog_id = instance.catalog_id
-    return instance_id, secret_key, catalog_id
+    assert resp.status_code == 201
+    return catalog_id, secret_key

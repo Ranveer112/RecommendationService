@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import Index, JSON, String, ForeignKey, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -9,12 +9,11 @@ class Base(DeclarativeBase):
     pass
 
 
-class Instance(Base):
-    __tablename__ = "instances"
+class Catalog(Base):
+    __tablename__ = "catalogs"
 
-    instance_id: Mapped[str] = mapped_column(String, primary_key=True)
+    catalog_id: Mapped[str] = mapped_column(String, primary_key=True)
     secret_key: Mapped[str] = mapped_column(String)
-    catalog_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class Product(Base):
@@ -22,7 +21,9 @@ class Product(Base):
 
     product_id: Mapped[str] = mapped_column(String, primary_key=True)
     product_name: Mapped[str] = mapped_column(String)
-    catalog_id: Mapped[str] = mapped_column(String)
+    catalog_id: Mapped[str] = mapped_column(
+        ForeignKey("catalogs.catalog_id", ondelete="CASCADE")
+    )
     categories: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 
@@ -37,7 +38,9 @@ class Rating(Base):
     score: Mapped[str] = mapped_column(
         String
     )  # Using String to avoid float precision issues in SQLite; convert in app layer
-    catalog_id: Mapped[str] = mapped_column(String)
+    catalog_id: Mapped[str] = mapped_column(
+        ForeignKey("catalogs.catalog_id", ondelete="CASCADE")
+    )
     insertion_order: Mapped[int] = mapped_column()
 
     __table_args__ = (

@@ -10,13 +10,13 @@ pytestmark = pytest.mark.asyncio
 
 class TestCreateProduct:
     async def test_create_product_success(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "p1", "name": "Widget", "categories": ["electronics"]},
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -36,14 +36,14 @@ class TestCreateProduct:
         assert db_product.categories == ["electronics"]
 
     async def test_create_product_duplicate_rejected(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         product = {"productId": "dup1", "name": "Dup", "categories": ["cat"]}
-        headers = {"X-Instance-Key": secret_key}
+        headers = {"X-Catalog-Key": secret_key}
 
         resp1 = await client.post(
-            f"/instances/{instance_id}/products", json=product, headers=headers
+            f"/catalogs/{catalog_id}/products", json=product, headers=headers
         )
         assert resp1.status_code == 201
 
@@ -58,7 +58,7 @@ class TestCreateProduct:
         assert db_product.product_name == "Dup"
 
         resp2 = await client.post(
-            f"/instances/{instance_id}/products", json=product, headers=headers
+            f"/catalogs/{catalog_id}/products", json=product, headers=headers
         )
         assert resp2.status_code == 409
 
@@ -68,55 +68,55 @@ class TestCreateProduct:
         assert len(products) == 1
 
     async def test_create_product_missing_categories(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "p-nocat", "name": "No Cat"},
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 422
 
     async def test_create_product_empty_categories(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "p-empty", "name": "Empty Cat", "categories": []},
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 422
 
     async def test_create_product_unauthorized(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "p-unauth", "name": "X", "categories": ["c"]},
-            headers={"X-Instance-Key": "wrong-key"},
+            headers={"X-Catalog-Key": "wrong-key"},
         )
         assert resp.status_code == 401
 
 
 class TestUpdateProduct:
     async def test_update_name(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
-        headers = {"X-Instance-Key": secret_key}
+        catalog_id, secret_key = catalog_with_product
+        headers = {"X-Catalog-Key": secret_key}
 
         # Create first
         await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "upd1", "name": "Old Name", "categories": ["a"]},
             headers=headers,
         )
 
         resp = await client.put(
-            f"/instances/{instance_id}/products/upd1",
+            f"/catalogs/{catalog_id}/products/upd1",
             json={"name": "New Name"},
             headers=headers,
         )
@@ -137,19 +137,19 @@ class TestUpdateProduct:
         assert db_product.categories == ["a"]
 
     async def test_update_categories(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
-        headers = {"X-Instance-Key": secret_key}
+        catalog_id, secret_key = catalog_with_product
+        headers = {"X-Catalog-Key": secret_key}
 
         await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "upd2", "name": "P", "categories": ["old"]},
             headers=headers,
         )
 
         resp = await client.put(
-            f"/instances/{instance_id}/products/upd2",
+            f"/catalogs/{catalog_id}/products/upd2",
             json={"categories": ["new-a", "new-b"]},
             headers=headers,
         )
@@ -168,13 +168,13 @@ class TestUpdateProduct:
         assert db_product.categories == ["new-a", "new-b"]
 
     async def test_update_nonexistent_product(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.put(
-            f"/instances/{instance_id}/products/does-not-exist",
+            f"/catalogs/{catalog_id}/products/does-not-exist",
             json={"name": "X"},
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 404
 
@@ -190,19 +190,19 @@ class TestUpdateProduct:
 
 class TestDeleteProduct:
     async def test_delete_product_success(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
-        headers = {"X-Instance-Key": secret_key}
+        catalog_id, secret_key = catalog_with_product
+        headers = {"X-Catalog-Key": secret_key}
 
         await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "del1", "name": "ToDelete", "categories": ["x"]},
             headers=headers,
         )
 
         resp = await client.delete(
-            f"/instances/{instance_id}/products/del1",
+            f"/catalogs/{catalog_id}/products/del1",
             headers=headers,
         )
         assert resp.status_code == 204
@@ -218,36 +218,36 @@ class TestDeleteProduct:
 
         # Verify it's gone — update should 404
         resp2 = await client.put(
-            f"/instances/{instance_id}/products/del1",
+            f"/catalogs/{catalog_id}/products/del1",
             json={"name": "Ghost"},
             headers=headers,
         )
         assert resp2.status_code == 404
 
     async def test_delete_nonexistent_product(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.delete(
-            f"/instances/{instance_id}/products/nope",
-            headers={"X-Instance-Key": secret_key},
+            f"/catalogs/{catalog_id}/products/nope",
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 404
 
 
 class TestBulkCreateProducts:
     async def test_bulk_create_success(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         products = [
             {"productId": f"bulk-{i}", "name": f"Bulk {i}", "categories": ["cat"]}
             for i in range(5)
         ]
         resp = await client.post(
-            f"/instances/{instance_id}/products/bulk",
+            f"/catalogs/{catalog_id}/products/bulk",
             json=products,
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -258,20 +258,20 @@ class TestBulkCreateProducts:
         stmt = select(DBProduct).where(DBProduct.catalog_id == catalog_id)
         result = await db_session.execute(stmt)
         db_products = result.scalars().all()
-        assert len(db_products) == 6  # 5 bulk + 1 seed from instance_with_catalog
+        assert len(db_products) == 6  # 5 bulk + 1 seed from catalog_with_product
         product_ids = {p.product_id for p in db_products}
         expected_ids = {"seed-1", "bulk-0", "bulk-1", "bulk-2", "bulk-3", "bulk-4"}
         assert product_ids == expected_ids
 
     async def test_bulk_create_skips_duplicates(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
-        headers = {"X-Instance-Key": secret_key}
+        catalog_id, secret_key = catalog_with_product
+        headers = {"X-Catalog-Key": secret_key}
 
         # Create one product first
         await client.post(
-            f"/instances/{instance_id}/products",
+            f"/catalogs/{catalog_id}/products",
             json={"productId": "existing", "name": "Exists", "categories": ["a"]},
             headers=headers,
         )
@@ -281,7 +281,7 @@ class TestBulkCreateProducts:
             {"productId": "new-one", "name": "New", "categories": ["b"]},
         ]
         resp = await client.post(
-            f"/instances/{instance_id}/products/bulk",
+            f"/catalogs/{catalog_id}/products/bulk",
             json=products,
             headers=headers,
         )
@@ -293,27 +293,27 @@ class TestBulkCreateProducts:
         assert data["skipped"][0]["productId"] == "existing"
 
     async def test_bulk_create_empty_array_rejected(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         resp = await client.post(
-            f"/instances/{instance_id}/products/bulk",
+            f"/catalogs/{catalog_id}/products/bulk",
             json=[],
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 400
 
     async def test_bulk_create_exceeds_limit(
-        self, client: AsyncClient, instance_with_catalog, db_session: AsyncSession
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
-        instance_id, secret_key, catalog_id = instance_with_catalog
+        catalog_id, secret_key = catalog_with_product
         products = [
             {"productId": f"over-{i}", "name": f"O {i}", "categories": ["c"]}
             for i in range(2001)
         ]
         resp = await client.post(
-            f"/instances/{instance_id}/products/bulk",
+            f"/catalogs/{catalog_id}/products/bulk",
             json=products,
-            headers={"X-Instance-Key": secret_key},
+            headers={"X-Catalog-Key": secret_key},
         )
         assert resp.status_code == 400
