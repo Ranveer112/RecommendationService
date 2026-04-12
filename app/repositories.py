@@ -24,16 +24,6 @@ class CatalogRepository:
             return result
 
     @staticmethod
-    async def get_rating_by_order(catalog_id: str, insertion_order: int):
-        async with AsyncSessionLocal() as session:
-            stmt = select(DBRating).where(
-                DBRating.catalog_id == catalog_id,
-                DBRating.insertion_order == insertion_order,
-            )
-            result = await session.execute(stmt)
-            return result.scalars().first()
-
-    @staticmethod
     async def get_total_users(catalog_id: str) -> int:
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -163,15 +153,137 @@ class CatalogRepository:
         return created, skipped
 
     @staticmethod
+    async def upsert_rating(catalog_id: str, rating: Rating) -> bool:
+        """Upsert a single rating. Returns False if the product does not exist."""
+        async with AsyncSessionLocal() as session:
+            # Check product exists
+            stmt = select(DBProduct.product_id).where(
+                DBProduct.catalog_id == catalog_id,
+                DBProduct.product_id == rating.productId,
+            )
+            result = await session.execute(stmt)
+            if result.scalars().first() is None:
+                return False
+
+            # Check for existing rating
+            stmt = select(DBRating).where(
+                DBRating.catalog_id == catalog_id,
+                DBRating.user_id == rating.userId,
+                DBRating.product_id == rating.productId,
+            )
+            result = await session.execute(stmt)
+            db_rating = result.scalars().first()
+
+            if db_rating is not None:
+                db_rating.score = str(rating.score)
+            else:
+                session.add(
+                    DBRating(
+                        product_id=rating.productId,
+                        user_id=rating.userId,
+                        score=str(rating.score),
+                        catalog_id=catalog_id,
+                    )
+                )
+            await session.commit()
+            return True
+
+    @staticmethod
+    async def delete_rating(catalog_id: str, user_id: str, product_id: str) -> bool:
+        """Delete a single rating. Returns False if the rating does not exist."""
+        async with AsyncSessionLocal() as session:
+            stmt = select(DBRating).where(
+                DBRating.catalog_id == catalog_id,
+                DBRating.user_id == user_id,
+                DBRating.product_id == product_id,
+            )
+            result = await session.execute(stmt)
+            db_rating = result.scalars().first()
+            if db_rating is None:
+                return False
+            await session.delete(db_rating)
+            await session.commit()
+            return True
+
+    @staticmethod
     async def create_ratings(catalog_id: str, ratings: list[Rating]) -> None:
         async with AsyncSessionLocal() as session:
-            for idx, rating in enumerate(ratings):
+            for rating in ratings:
                 db_rating = DBRating(
                     product_id=rating.productId,
                     user_id=rating.userId,
                     score=str(rating.score),
                     catalog_id=catalog_id,
-                    insertion_order=idx,
                 )
                 session.add(db_rating)
             await session.commit()
+
+    @staticmethod
+    async def bulk_upsert_ratings(
+        catalog_id: str, ratings: list[Rating]
+    ) -> tuple[list[Rating], list[tuple[str, str, str]]]:
+        """Upsert ratings in bulk, skipping those that reference non-existent products.
+        Returns (saved_ratings_as_schemas, skipped_as_tuples_of_userId_productId_reason).
+        """
+        from sqlalchemy import bindparam, insert, update
+
+        async with AsyncSessionLocal() as session:
+            # Fetch existing product IDs for this catalog
+            stmt = select(DBProduct.product_id).where(
+                DBProduct.catalog_id == catalog_id
+            )
+            result = await session.execute(stmt)
+            valid_product_ids: set[str] = {row[0] for row in result.all()}
+
+            # Fetch existing ratings keyed by (user_id, product_id)
+            stmt = select(DBRating).where(DBRating.catalog_id == catalog_id)
+            result = await session.execute(stmt)
+            existing_ratings: dict[tuple[str, str], DBRating] = {
+                (r.user_id, r.product_id): r for r in result.scalars().all()
+            }
+
+            saved: list[Rating] = []
+            skipped: list[tuple[str, str, str]] = []
+            to_insert: list[dict[str, object]] = []
+            to_update: list[dict[str, object]] = []
+
+            for rating in ratings:
+                if rating.productId not in valid_product_ids:
+                    skipped.append(
+                        (rating.userId, rating.productId, "Product not found")
+                    )
+                    continue
+
+                key = (rating.userId, rating.productId)
+                if key in existing_ratings:
+                    db_rating = existing_ratings[key]
+                    to_update.append({"_id": db_rating.id, "_score": str(rating.score)})
+                else:
+                    to_insert.append(
+                        {
+                            "product_id": rating.productId,
+                            "user_id": rating.userId,
+                            "score": str(rating.score),
+                            "catalog_id": catalog_id,
+                        }
+                    )
+                    # Track in existing so later duplicates in the same batch update
+                    existing_ratings[key] = None  # type: ignore[assignment]
+
+                saved.append(rating)
+
+            # 1 bulk UPDATE for existing ratings (via raw connection to bypass ORM)
+            if to_update:
+                conn = await session.connection()
+                await conn.execute(
+                    update(DBRating)
+                    .where(DBRating.id == bindparam("_id"))
+                    .values(score=bindparam("_score")),
+                    to_update,
+                )
+            # 1 bulk INSERT for new ratings
+            if to_insert:
+                await session.execute(insert(DBRating), to_insert)
+            await session.commit()
+
+        return saved, skipped

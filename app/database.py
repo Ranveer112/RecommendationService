@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Index, JSON, String, ForeignKey, event
+from sqlalchemy import JSON, String, ForeignKey, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -41,11 +41,7 @@ class Rating(Base):
     catalog_id: Mapped[str] = mapped_column(
         ForeignKey("catalogs.catalog_id", ondelete="CASCADE")
     )
-    insertion_order: Mapped[int] = mapped_column()
-
-    __table_args__ = (
-        Index("idx_catalog_insertion_order", "catalog_id", "insertion_order"),
-    )
+    # TODO: add ordering / timestamp column if needed for training data sequencing
 
 
 # SQLite async engine

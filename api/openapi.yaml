@@ -44,18 +44,23 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /catalogs/{catalogId}/ratings/{userId}/{productId}:
     delete:
       summary: Delete a user rating
       security:
         - catalogKey: []
       parameters:
         - $ref: '#/components/parameters/catalogId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RatingKey'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '204':
           description: Rating deleted
@@ -72,7 +77,7 @@ paths:
 
   /catalogs/{catalogId}/ratings/bulk:
     put:
-      summary: Bulk add or modify ratings (all-or-nothing, max 2000)
+      summary: Bulk add or modify ratings
       security:
         - catalogKey: []
       parameters:
@@ -174,7 +179,7 @@ paths:
 
   /catalogs/{catalogId}/products/bulk:
     post:
-      summary: Bulk-create products (all-or-nothing, max 2000)
+      summary: Bulk-create products
       security:
         - catalogKey: []
       parameters:
@@ -400,15 +405,6 @@ components:
         score:
           type: number
           format: float
-
-    RatingKey:
-      type: object
-      required: [userId, productId]
-      properties:
-        userId:
-          type: string
-        productId:
-          type: string
 
     Recommendation:
       type: object
