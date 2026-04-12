@@ -38,14 +38,41 @@ Retrieve quality metrics (e.g., RMSE, precision@k) for the current model.
 
 ---
 
+## Prerequisites
+
+- **Python 3.12+** — enforced via `requires-python` in `pyproject.toml` and the `.python-version` file.
+
+---
+
 ## Development
+
+### Setup
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv
+
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
+# Install all dependencies (runtime + dev)
+pip install -r requirements-dev.txt
+```
+
+### Running Locally
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The API will be available at `http://localhost:8000`. Interactive docs are served at `/docs` (Swagger UI) and `/redoc`.
 
 ### Running Tests
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
 # Run all tests
 pytest tests/ -v
 
@@ -57,12 +84,58 @@ pytest tests/ -v --cov=app --cov-report=term-missing
 
 This project uses GitHub Actions for continuous integration:
 
-- **Triggers**: Push to `main`/`develop` branches, pull requests
-- **Matrix**: Tests run on Python 3.11, 3.12, and 3.13
-- **Coverage**: Generates coverage reports and uploads to Codecov
+- **Triggers**: Push to `main`, pull requests to `main`
+- **Python version**: Read from `.python-version` (currently 3.12)
+- **Steps**: Dependency install, lint (`ruff`), vulnerability scan (`pip-audit`), tests (`pytest`)
 - **Caching**: Pip dependencies are cached for faster builds
 
 The CI configuration is in `.github/workflows/ci.yml`.
+
+---
+
+## Deployment
+
+### Option 1: Direct (Uvicorn)
+
+Run the FastAPI app directly with Uvicorn on the target host.
+
+```bash
+# Install runtime dependencies only
+pip install -r requirements.txt
+
+# Start the server (adjust workers to match available CPU cores)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Option 2: Docker
+
+Build and run using Docker for a reproducible, isolated deployment.
+
+```dockerfile
+# Dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ app/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+```
+
+```bash
+docker build -t recommendation-service .
+docker run -p 8000:8000 recommendation-service
+```
+
+### Environment Notes
+
+- The service uses **aiosqlite** (file-based SQLite). The database layer relies on SQLite-specific features (e.g., `PRAGMA foreign_keys`) and stores scores as strings to work around SQLite float precision, so it is not a drop-in swap to another database engine without code changes.
+- **PyTorch** is included for the recommendation model. Consider using `--extra-index-url` for CPU-only wheels to reduce image size if GPU inference is not needed.
 
 ---
 
@@ -78,3 +151,5 @@ The CI configuration is in `.github/workflows/ci.yml`.
 - pytest-asyncio (dev)
 - pytest-cov (dev)
 - httpx (dev)
+- ruff (dev)
+- pip-audit (dev)
