@@ -1,7 +1,10 @@
+from collections import namedtuple
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import verify_catalog_key
 from app.repositories import CatalogRepository
+from app.utils import get_jaccard_score
+from app.collaborative import skip_collaborative_filtering
 from app.schemas import (
     BulkProductResult,
     BulkRatingResult,
@@ -16,6 +19,8 @@ from app.schemas import (
 from app.database import Product as DBProduct
 
 router = APIRouter()
+
+SimilarityResult = namedtuple('SimilarityResult', ['product_id', 'score'])
 
 
 def _db_product_to_schema(db_product: DBProduct) -> Product:
@@ -174,6 +179,55 @@ async def delete_product(
     deleted = await CatalogRepository.delete_product(catalogId, productId)
     if not deleted:
         raise HTTPException(status_code=404, detail="Product not found")
+
+
+@router.get(
+    "/catalogs/{catalogId}/products/{productId}/similar",
+    response_model=list[Recommendation],
+    dependencies=[Depends(verify_catalog_key)],
+)
+async def get_similar_products(
+    catalogId: str,
+    productId: str,
+    limit: int = 10,
+) -> list[Recommendation]:
+    """Get similar products for a given product."""
+    if limit < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="limit must be at least 1",
+        )
+
+    # Validate product exists
+    product = await CatalogRepository.get_product(catalogId, productId)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if skip_collaborative_filtering(productId, catalogId):
+        #Do jaccard similarity
+
+        #
+        #Load all products from the catalog
+        all_other_products=CatalogRepository.get_all_products(catalog_id=catalogId, exclude_product_id=productId)
+
+        similarity_results=[]
+        for other_product in all_other_products:
+            score = get_jaccard_score(product.categories, other_product.categories)
+            similarity_results.append(SimilarityResult(product_id=other_product.product_id, score=score))
+
+        #sort by score descending
+        similarity_results.sort(key=lambda result: result.score, reverse=True) 
+        
+        #take top limit results and convert to Recommendation objects
+        top_results = similarity_results[:limit]
+        return [
+            Recommendation(productId=result.product_id, score=result.score)
+            for result in top_results
+        ]
+
+    else:
+        #Collobarative filtering?
+    return []
 
 
 @router.get(

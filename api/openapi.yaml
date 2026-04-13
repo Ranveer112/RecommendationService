@@ -214,6 +214,42 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /catalogs/{catalogId}/products/{productId}/similar:
+    get:
+      summary: Get similar products for a given product
+      security:
+        - catalogKey: []
+      parameters:
+        - $ref: '#/components/parameters/catalogId'
+        - $ref: '#/components/parameters/productId'
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of similar products to return
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        '200':
+          description: Ranked list of similar products (empty list if no similarity data)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Catalog or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /catalogs/{catalogId}/products/{productId}:
     put:
       summary: Update a product's name or categories

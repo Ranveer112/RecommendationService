@@ -153,6 +153,17 @@ class CatalogRepository:
         return created, skipped
 
     @staticmethod
+    async def get_all_products(
+        catalog_id: str, exclude_product_id: str | None = None
+    ) -> list[DBProduct]:
+        async with AsyncSessionLocal() as session:
+            stmt = select(DBProduct).where(DBProduct.catalog_id == catalog_id)
+            if exclude_product_id is not None:
+                stmt = stmt.where(DBProduct.product_id != exclude_product_id)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    @staticmethod
     async def upsert_rating(catalog_id: str, rating: Rating) -> bool:
         """Upsert a single rating. Returns False if the product does not exist."""
         async with AsyncSessionLocal() as session:
