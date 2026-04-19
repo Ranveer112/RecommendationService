@@ -298,3 +298,70 @@ class CatalogRepository:
             await session.commit()
 
         return saved, skipped
+
+    @staticmethod
+    async def get_product_ratings(catalog_id: str, product_id: str) -> dict[str, float]:
+        """Get all ratings for a single product as user_id -> score mapping."""
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(DBRating.user_id, DBRating.score)
+                .where(DBRating.catalog_id == catalog_id)
+                .where(DBRating.product_id == product_id)
+            )
+            result = await session.execute(stmt)
+            return {row[0]: float(row[1]) for row in result.all()}
+
+    @staticmethod
+    async def get_ratings_by_product_ids(
+        catalog_id: str, product_ids: list[str]
+    ) -> dict[str, dict[str, float]]:
+        """Get ratings for many products as product_id -> (user_id -> score)."""
+        if len(product_ids) == 0:
+            return {}
+
+        ratings_by_product: dict[str, dict[str, float]] = {
+            product_id: {} for product_id in product_ids
+        }
+
+        # Keep below SQLite parameter limits for IN clauses.
+        chunk_size = 900
+
+        async with AsyncSessionLocal() as session:
+            for start in range(0, len(product_ids), chunk_size):
+                chunk_ids = product_ids[start : start + chunk_size]
+                stmt = (
+                    select(DBRating.product_id, DBRating.user_id, DBRating.score)
+                    .where(DBRating.catalog_id == catalog_id)
+                    .where(DBRating.product_id.in_(chunk_ids))
+                )
+                result = await session.execute(stmt)
+
+                for product_id, user_id, score in result.all():
+                    ratings_by_product[product_id][user_id] = float(score)
+
+        return ratings_by_product
+
+    @staticmethod
+    async def get_common_user_ratings(
+        catalog_id: str, product_a_id: str, product_b_id: str
+    ) -> tuple[list[float], list[float]]:
+        """Get ratings from users who rated both products.
+
+        Returns two vectors:
+        - First vector: ratings for product_a by common users
+        - Second vector: ratings for product_b by common users (same order)
+        """
+        # Get ratings for each product separately
+        ratings_a = await CatalogRepository.get_product_ratings(
+            catalog_id, product_a_id
+        )
+        ratings_b = await CatalogRepository.get_product_ratings(
+            catalog_id, product_b_id
+        )
+
+        # Find common users and build vectors in consistent order
+        common_users = sorted(set(ratings_a.keys()) & set(ratings_b.keys()))
+        vec_a = [ratings_a[user] for user in common_users]
+        vec_b = [ratings_b[user] for user in common_users]
+
+        return vec_a, vec_b
