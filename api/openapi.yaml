@@ -246,6 +246,12 @@ paths:
             type: integer
             minimum: 1
             default: 10
+        - name: strategy
+          in: query
+          required: false
+          description: Similarity strategy to use
+          schema:
+            $ref: '#/components/schemas/SimilarityStrategy'
       responses:
         '200':
           description: Ranked list of similar products (empty list if no similarity data)
@@ -478,6 +484,17 @@ components:
         score:
           type: number
           format: float
+
+    SimilarityStrategy:
+      type: string
+      enum:
+        - auto
+        - jaccard
+        - euclidean
+        - pearson
+        - cosine
+        - matrix_factorization
+      default: auto
 
     Error:
       type: object

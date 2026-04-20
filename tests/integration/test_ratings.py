@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import Rating as DBRating
+from app.database import CatalogTrainingProgress, Rating as DBRating
 
 
 pytestmark = pytest.mark.asyncio
@@ -32,6 +32,11 @@ class TestUpsertRating:
         db_rating = result.scalars().first()
         assert db_rating is not None
         assert float(db_rating.score) == 4.5
+
+        # Verify training progress incremented
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 1
 
     async def test_upsert_rating_updates_existing(
         self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
@@ -63,6 +68,11 @@ class TestUpsertRating:
         ratings = result.scalars().all()
         assert len(ratings) == 1
         assert float(ratings[0].score) == 5.0
+
+        # Verify training progress incremented for both upserts (insert + update)
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 2
 
     async def test_upsert_rating_unauthorized(
         self, client: AsyncClient, catalog_with_product
@@ -131,6 +141,11 @@ class TestDeleteRating:
         db_rating = result.scalars().first()
         assert db_rating is None
 
+        # Verify training progress: 1 from bulk insert + 1 from delete = 2
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 2
+
     async def test_delete_rating_unauthorized(
         self, client: AsyncClient, catalog_with_product
     ):
@@ -170,6 +185,11 @@ class TestBulkUpsertRatings:
         assert scores[("u1", "seed-1")] == 4.0
         assert scores[("u2", "seed-1")] == 3.5
 
+        # Verify training progress incremented by 2 (both saved)
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 2
+
     async def test_bulk_upsert_skips_invalid_products(
         self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
     ):
@@ -197,6 +217,11 @@ class TestBulkUpsertRatings:
         db_ratings = result.scalars().all()
         assert len(db_ratings) == 1
         assert db_ratings[0].product_id == "seed-1"
+
+        # Verify training progress: only 1 saved (the skipped one doesn't count)
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 1
 
     async def test_bulk_upsert_updates_existing_scores(
         self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
@@ -231,6 +256,11 @@ class TestBulkUpsertRatings:
         db_ratings = result.scalars().all()
         assert len(db_ratings) == 1
         assert float(db_ratings[0].score) == 5.0
+
+        # Verify training progress: 1 from first bulk + 1 from second bulk (update) = 2
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 2
 
     async def test_bulk_upsert_empty_array_rejected(
         self, client: AsyncClient, catalog_with_product

@@ -25,3 +25,7 @@ Thumbs.db
 
 # Internal project planning
 .execution/
+
+# Database and data files
+recommendations.db
+data/

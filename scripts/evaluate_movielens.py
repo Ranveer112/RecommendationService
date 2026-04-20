@@ -136,8 +136,9 @@ async def evaluate_overlap_on_validation_users(
     secret_key: str,
     validation_ratings_df: pd.DataFrame,
     top_k: int = 5,
-    max_validation_users: int = 50,
-    max_anchors_per_user: int = 50,
+    max_validation_users: int = 5,
+    max_anchors_per_user: int = 10,
+    strategy: str = "auto",
 ) -> None:
     """Evaluate overlap@K on validation users.
 
@@ -177,7 +178,7 @@ async def evaluate_overlap_on_validation_users(
             user_rates: list[float] = []
             for anchor_product_id in anchor_products:
                 resp = await client.get(
-                    f"{BASE_URL}/catalogs/{catalog_id}/products/{anchor_product_id}/similar?limit={top_k}",
+                    f"{BASE_URL}/catalogs/{catalog_id}/products/{anchor_product_id}/similar?limit={top_k}&strategy={strategy}",
                     headers=headers,
                 )
                 if resp.status_code != 200:
@@ -216,6 +217,7 @@ async def evaluate_overlap_on_validation_users(
     print(f"Max anchors per user: {max_anchors_per_user}")
     print(f"Average overlap count per query: {avg_overlap_count:.3f}")
     print(f"Average overlap rate per query: {avg_overlap_rate_event:.4f}")
+    print(f"Strategy: {strategy}")
     print(f"Average overlap rate per user: {avg_overlap_rate_user:.4f}")
 
 
@@ -244,14 +246,28 @@ async def main() -> None:
     parser.add_argument(
         "--max-validation-users",
         type=int,
-        default=50,
+        default=10,
         help="Max validation users to evaluate (default: 50)",
     )
     parser.add_argument(
         "--max-anchors-per-user",
         type=int,
-        default=50,
+        default=10,
         help="Max anchor products per validation user (default: 50)",
+    )
+    parser.add_argument(
+        "--strategy",
+        type=str,
+        default="auto",
+        choices=[
+            "auto",
+            "jaccard",
+            "euclidean",
+            "pearson",
+            "cosine",
+            "matrix_factorization",
+        ],
+        help="Similarity strategy to use (default: auto)",
     )
     args = parser.parse_args()
 
@@ -267,6 +283,7 @@ async def main() -> None:
         top_k=args.top_k,
         max_validation_users=args.max_validation_users,
         max_anchors_per_user=args.max_anchors_per_user,
+        strategy=args.strategy,
     )
 
     print(f"\nCatalog ID: {catalog_id}")

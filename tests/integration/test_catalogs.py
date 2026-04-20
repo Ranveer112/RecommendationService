@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import Catalog
+from app.database import Catalog, CatalogTrainingProgress
 
 
 pytestmark = pytest.mark.asyncio
@@ -26,6 +26,12 @@ class TestRegisterCatalog:
         db_catalog = result.scalars().first()
         assert db_catalog is not None
         assert db_catalog.secret_key == data["secretKey"]
+
+        # Verify training progress initialized to 0
+        progress = await db_session.get(CatalogTrainingProgress, data["catalogId"])
+        assert progress is not None
+        assert progress.untrained_ratings == 0
+        assert progress.trained_ratings == 0
 
     async def test_register_returns_unique_catalogs(
         self, client: AsyncClient, db_session: AsyncSession

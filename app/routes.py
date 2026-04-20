@@ -1,10 +1,17 @@
 from dataclasses import dataclass
-from fastapi import APIRouter, Depends, HTTPException
+from enum import Enum
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.dependencies import verify_catalog_key
 from app.repositories import CatalogRepository
-from app.utils import get_jaccard_score, euclidean_distance
+from app.utils import (
+    get_jaccard_score,
+    pearson_correlation,
+    cosine_similarity,
+    euclidean_distance,
+)
 from app.collaborative import skip_collaborative_filtering
+from app.tasks import enqueue_retrain_catalog
 from app.schemas import (
     BulkProductResult,
     BulkRatingResult,
@@ -17,6 +24,39 @@ from app.schemas import (
     Recommendation,
 )
 from app.database import Product as DBProduct
+
+
+class SimilarityStrategy(str, Enum):
+    auto = "auto"
+    jaccard = "jaccard"
+    euclidean = "euclidean"
+    pearson = "pearson"
+    cosine = "cosine"
+    matrix_factorization = "matrix_factorization"
+
+
+RETRAIN_TRIGGER_RATIO = 0.2
+RETRAIN_TRIGGER_MIN_UNTRAINED = 50
+
+
+async def catalog_training_update(catalog_id: str, inserted_count: int) -> None:
+    """Check if new rating changes should trigger a retrain and enqueue if so."""
+    if inserted_count <= 0:
+        return
+
+    progress = await CatalogRepository.increment_untrained_ratings(
+        catalog_id, inserted_count
+    )
+
+    if progress.untrained_ratings < RETRAIN_TRIGGER_MIN_UNTRAINED:
+        return
+    if (
+        progress.trained_ratings == 0
+        or progress.untrained_ratings / progress.trained_ratings
+        >= RETRAIN_TRIGGER_RATIO
+    ):
+        await enqueue_retrain_catalog(catalog_id)
+
 
 router = APIRouter()
 
@@ -45,6 +85,7 @@ async def register_catalog() -> CatalogWithKey:
     secret_key = secrets.token_urlsafe(64)
 
     await CatalogRepository.create(catalog_id, secret_key)
+    await CatalogRepository.create_training_progress(catalog_id)
 
     return CatalogWithKey(catalogId=catalog_id, secretKey=secret_key)
 
@@ -61,6 +102,7 @@ async def upsert_rating(
     saved = await CatalogRepository.upsert_rating(catalogId, body)
     if not saved:
         raise HTTPException(status_code=404, detail="Product not found")
+    await catalog_training_update(catalogId, 1)
 
 
 @router.delete(
@@ -77,6 +119,7 @@ async def delete_rating(
     deleted = await CatalogRepository.delete_rating(catalogId, userId, productId)
     if not deleted:
         raise HTTPException(status_code=404, detail="Rating not found")
+    await catalog_training_update(catalogId, 1)
 
 
 @router.put(
@@ -97,6 +140,7 @@ async def bulk_upsert_ratings(
     saved_schemas, skipped_tuples = await CatalogRepository.bulk_upsert_ratings(
         catalogId, body
     )
+    await catalog_training_update(catalogId, len(saved_schemas))
     return BulkRatingResult(
         saved=saved_schemas,
         skipped=[
@@ -194,6 +238,7 @@ async def get_similar_products(
     catalogId: str,
     productId: str,
     limit: int = 10,
+    strategy: SimilarityStrategy = Query(default=SimilarityStrategy.auto),
 ) -> list[Recommendation]:
     """Get similar products for a given product."""
     if limit < 1:
@@ -211,7 +256,22 @@ async def get_similar_products(
         catalog_id=catalogId, exclude_product_id=productId
     )
 
-    if skip_collaborative_filtering(productId, catalogId):
+    if strategy == SimilarityStrategy.matrix_factorization:
+        # TODO: implement matrix factorization similarity
+
+        # For each product, compute it's embedding and find the distance with the given product embedding
+        # The metric of distance would be cosine similarity.
+        raise HTTPException(
+            status_code=501,
+            detail="matrix_factorization strategy is not yet implemented",
+        )
+
+    use_jaccard = strategy == SimilarityStrategy.jaccard or (
+        strategy == SimilarityStrategy.auto
+        and skip_collaborative_filtering(productId, catalogId)
+    )
+
+    if use_jaccard:
 
         similarity_results: list[SimilarityResult] = []
         for other_product in all_other_products:
@@ -239,11 +299,15 @@ async def get_similar_products(
             other_product_vec = [
                 other_product_ratings[user_id] for user_id in common_users
             ]
-            score = (
-                0
-                if len(other_product_vec) < 7
-                else 1.0 / (1.0 + euclidean_distance(other_product_vec, product_vec))
-            )
+
+            if len(other_product_vec) < 7:
+                score = 0
+            elif strategy == SimilarityStrategy.euclidean:
+                score = 1.0 / (1.0 + euclidean_distance(other_product_vec, product_vec))
+            elif strategy == SimilarityStrategy.cosine:
+                score = cosine_similarity(other_product_vec, product_vec)
+            else:
+                score = pearson_correlation(other_product_vec, product_vec)
 
             similarity_results.append(
                 SimilarityResult(product_id=other_product.product_id, score=score)

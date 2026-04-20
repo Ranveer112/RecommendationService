@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from app.database import (
     AsyncSessionLocal,
     Catalog,
+    CatalogTrainingProgress as DBCatalogTrainingProgress,
     Product as DBProduct,
     Rating as DBRating,
 )
@@ -10,12 +11,53 @@ from app.schemas import Product, ProductUpdate, Rating
 
 
 class CatalogRepository:
+
     @staticmethod
     async def create(catalog_id: str, secret_key: str) -> None:
         async with AsyncSessionLocal() as session:
             catalog = Catalog(catalog_id=catalog_id, secret_key=secret_key)
             session.add(catalog)
             await session.commit()
+
+    @staticmethod
+    async def create_training_progress(catalog_id: str) -> None:
+        """Create an initial training progress row for a catalog."""
+        async with AsyncSessionLocal() as session:
+            session.add(
+                DBCatalogTrainingProgress(
+                    catalog_id=catalog_id,
+                    untrained_ratings=0,
+                    trained_ratings=0,
+                )
+            )
+            await session.commit()
+
+    @staticmethod
+    async def get_training_progress(
+        catalog_id: str,
+    ) -> DBCatalogTrainingProgress | None:
+        """Read training progress row for a catalog."""
+        async with AsyncSessionLocal() as session:
+            return await session.get(DBCatalogTrainingProgress, catalog_id)
+
+    @staticmethod
+    async def increment_untrained_ratings(
+        catalog_id: str, count: int
+    ) -> DBCatalogTrainingProgress:
+        """Increment untrained_ratings by count. Returns the updated row."""
+        async with AsyncSessionLocal() as session:
+            progress = await session.get(DBCatalogTrainingProgress, catalog_id)
+            if progress is None:
+                progress = DBCatalogTrainingProgress(
+                    catalog_id=catalog_id,
+                    untrained_ratings=0,
+                    trained_ratings=0,
+                )
+                session.add(progress)
+            progress.untrained_ratings += count
+            await session.commit()
+            await session.refresh(progress)
+            return progress
 
     @staticmethod
     async def get_by_id(catalog_id: str) -> Catalog | None:
@@ -197,7 +239,8 @@ class CatalogRepository:
                     )
                 )
             await session.commit()
-            return True
+
+        return True
 
     @staticmethod
     async def delete_rating(catalog_id: str, user_id: str, product_id: str) -> bool:
@@ -217,24 +260,11 @@ class CatalogRepository:
             return True
 
     @staticmethod
-    async def create_ratings(catalog_id: str, ratings: list[Rating]) -> None:
-        async with AsyncSessionLocal() as session:
-            for rating in ratings:
-                db_rating = DBRating(
-                    product_id=rating.productId,
-                    user_id=rating.userId,
-                    score=str(rating.score),
-                    catalog_id=catalog_id,
-                )
-                session.add(db_rating)
-            await session.commit()
-
-    @staticmethod
     async def bulk_upsert_ratings(
         catalog_id: str, ratings: list[Rating]
     ) -> tuple[list[Rating], list[tuple[str, str, str]]]:
         """Upsert ratings in bulk, skipping those that reference non-existent products.
-        Returns (saved_ratings_as_schemas, skipped_as_tuples_of_userId_productId_reason).
+        Returns (saved_ratings, skipped_tuples).
         """
         from sqlalchemy import bindparam, insert, update
 
@@ -257,6 +287,7 @@ class CatalogRepository:
             skipped: list[tuple[str, str, str]] = []
             to_insert: list[dict[str, object]] = []
             to_update: list[dict[str, object]] = []
+            seen_keys: set[tuple[str, str]] = set()
 
             for rating in ratings:
                 if rating.productId not in valid_product_ids:
@@ -266,6 +297,10 @@ class CatalogRepository:
                     continue
 
                 key = (rating.userId, rating.productId)
+                if key in seen_keys:
+                    continue  # skip duplicate within this batch
+                seen_keys.add(key)
+
                 if key in existing_ratings:
                     db_rating = existing_ratings[key]
                     to_update.append({"_id": db_rating.id, "_score": str(rating.score)})
@@ -278,8 +313,6 @@ class CatalogRepository:
                             "catalog_id": catalog_id,
                         }
                     )
-                    # Track in existing so later duplicates in the same batch update
-                    existing_ratings[key] = None  # type: ignore[assignment]
 
                 saved.append(rating)
 

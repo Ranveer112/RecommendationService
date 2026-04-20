@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import JSON, String, ForeignKey, ForeignKeyConstraint, event
+from sqlalchemy import JSON, Integer, String, ForeignKey, ForeignKeyConstraint, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -51,6 +51,16 @@ class Rating(Base):
         ),
     )
     # TODO: add ordering / timestamp column if needed for training data sequencing
+
+
+class CatalogTrainingProgress(Base):
+    __tablename__ = "catalog_training_progress"
+
+    catalog_id: Mapped[str] = mapped_column(
+        ForeignKey("catalogs.catalog_id", ondelete="CASCADE"), primary_key=True
+    )
+    untrained_ratings: Mapped[int] = mapped_column(Integer, default=0)
+    trained_ratings: Mapped[int] = mapped_column(Integer, default=0)
 
 
 # SQLite async engine

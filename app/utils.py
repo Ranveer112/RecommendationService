@@ -49,3 +49,29 @@ def euclidean_distance(vec_a: list[float], vec_b: list[float]) -> float:
         return 0.0
 
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(vec_a, vec_b)))
+
+
+def pearson_correlation(vec_a: list[float], vec_b: list[float]) -> float:
+    """Calculate Pearson correlation coefficient between two vectors.
+
+    Returns a value in [-1, 1]. Returns 0.0 if either vector has zero variance
+    (all identical values) or if vectors are empty.
+    """
+    if len(vec_a) != len(vec_b):
+        raise ValueError("Vectors must have the same length")
+
+    n = len(vec_a)
+    if n == 0:
+        return 0.0
+
+    mean_a = sum(vec_a) / n
+    mean_b = sum(vec_b) / n
+
+    numerator = sum((a - mean_a) * (b - mean_b) for a, b in zip(vec_a, vec_b))
+    denom_a = math.sqrt(sum((a - mean_a) ** 2 for a in vec_a))
+    denom_b = math.sqrt(sum((b - mean_b) ** 2 for b in vec_b))
+
+    if denom_a == 0 or denom_b == 0:
+        return 0.0
+
+    return numerator / (denom_a * denom_b)
