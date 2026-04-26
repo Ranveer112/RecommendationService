@@ -2,7 +2,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import Product as DBProduct
+from app.database import (
+    CatalogTrainingProgress,
+    Product as DBProduct,
+    Rating as DBRating,
+)
 
 
 pytestmark = pytest.mark.asyncio
@@ -223,6 +227,68 @@ class TestDeleteProduct:
             headers=headers,
         )
         assert resp2.status_code == 404
+
+    async def test_delete_product_with_ratings_updates_training_progress(
+        self, client: AsyncClient, catalog_with_product, db_session: AsyncSession
+    ):
+        catalog_id, secret_key = catalog_with_product
+        headers = {"X-Catalog-Key": secret_key}
+
+        # Create a product with ratings
+        await client.post(
+            f"/catalogs/{catalog_id}/products",
+            json={
+                "productId": "rated-product",
+                "name": "Rated",
+                "categories": ["test"],
+            },
+            headers=headers,
+        )
+
+        # Add 3 ratings to the product
+        ratings = [
+            {"userId": "u1", "productId": "rated-product", "score": 4.0},
+            {"userId": "u2", "productId": "rated-product", "score": 3.5},
+            {"userId": "u3", "productId": "rated-product", "score": 5.0},
+        ]
+        await client.put(
+            f"/catalogs/{catalog_id}/ratings/bulk",
+            json=ratings,
+            headers=headers,
+        )
+
+        # Verify ratings exist and training progress is 3
+        stmt = select(DBRating).where(DBRating.product_id == "rated-product")
+        result = await db_session.execute(stmt)
+        assert len(result.scalars().all()) == 3
+
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert progress.untrained_ratings == 3
+
+        # Delete the product
+        resp = await client.delete(
+            f"/catalogs/{catalog_id}/products/rated-product",
+            headers=headers,
+        )
+        assert resp.status_code == 204
+
+        # Verify product and ratings are gone
+        stmt = select(DBProduct).where(DBProduct.product_id == "rated-product")
+        result = await db_session.execute(stmt)
+        assert result.scalars().first() is None
+
+        stmt = select(DBRating).where(DBRating.product_id == "rated-product")
+        result = await db_session.execute(stmt)
+        assert len(result.scalars().all()) == 0
+
+        # Verify training progress was updated for the 3 deleted ratings
+        await db_session.refresh(progress)
+        progress = await db_session.get(CatalogTrainingProgress, catalog_id)
+        assert progress is not None
+        assert (
+            progress.untrained_ratings == 6
+        )  # 3 from bulk insert + 3 from product deletion
 
     async def test_delete_nonexistent_product(
         self, client: AsyncClient, catalog_with_product, db_session: AsyncSession

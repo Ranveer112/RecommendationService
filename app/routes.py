@@ -224,9 +224,17 @@ async def delete_product(
     productId: str,
 ) -> None:
     """Delete a product and gracefully remove its associated ratings."""
+    # Count ratings before deletion
+    ratings_count = await CatalogRepository.count_product_ratings(catalogId, productId)
+
+    # Delete the product
     deleted = await CatalogRepository.delete_product(catalogId, productId)
     if not deleted:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    # Update training progress for the deleted ratings
+    if ratings_count > 0:
+        await catalog_training_update(catalogId, ratings_count)
 
 
 @router.get(

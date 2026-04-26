@@ -139,6 +139,7 @@ class CatalogRepository:
 
     @staticmethod
     async def delete_product(catalog_id: str, product_id: str) -> bool:
+        """Delete a product."""
         async with AsyncSessionLocal() as session:
             stmt = select(DBProduct).where(
                 DBProduct.catalog_id == catalog_id,
@@ -151,6 +152,21 @@ class CatalogRepository:
             await session.delete(db_product)
             await session.commit()
             return True
+
+    @staticmethod
+    async def count_product_ratings(catalog_id: str, product_id: str) -> int:
+        """Count ratings for a specific product."""
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(func.count())
+                .select_from(DBRating)
+                .where(
+                    DBRating.catalog_id == catalog_id,
+                    DBRating.product_id == product_id,
+                )
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
 
     @staticmethod
     async def bulk_create_products(
@@ -343,6 +359,21 @@ class CatalogRepository:
             )
             result = await session.execute(stmt)
             return {row[0]: float(row[1]) for row in result.all()}
+
+    @staticmethod
+    async def get_all_ratings(
+        catalog_id: str,
+    ) -> list[dict[str, str | float]]:
+        """Get all ratings for a catalog as dicts with product_id, user_id, score."""
+        async with AsyncSessionLocal() as session:
+            stmt = select(DBRating.product_id, DBRating.user_id, DBRating.score).where(
+                DBRating.catalog_id == catalog_id
+            )
+            result = await session.execute(stmt)
+            return [
+                {"product_id": product_id, "user_id": user_id, "score": float(score)}
+                for product_id, user_id, score in result.all()
+            ]
 
     @staticmethod
     async def get_ratings_by_product_ids(
