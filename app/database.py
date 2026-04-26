@@ -53,6 +53,27 @@ class Rating(Base):
     # TODO: add ordering / timestamp column if needed for training data sequencing
 
 
+class ProductEmbedding(Base):
+    __tablename__ = "product_embeddings"
+
+    product_id: Mapped[str] = mapped_column(String, primary_key=True)
+    catalog_id: Mapped[str] = mapped_column(String, primary_key=True)
+    embedding: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["product_id", "catalog_id"],
+            ["products.product_id", "products.catalog_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["catalog_id"],
+            ["catalogs.catalog_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
 class CatalogTrainingProgress(Base):
     __tablename__ = "catalog_training_progress"
 

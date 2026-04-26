@@ -5,6 +5,7 @@ from app.database import (
     Catalog,
     CatalogTrainingProgress as DBCatalogTrainingProgress,
     Product as DBProduct,
+    ProductEmbedding as DBProductEmbedding,
     Rating as DBRating,
 )
 from app.schemas import Product, ProductUpdate, Rating
@@ -404,6 +405,37 @@ class CatalogRepository:
                     ratings_by_product[product_id][user_id] = float(score)
 
         return ratings_by_product
+
+    @staticmethod
+    async def bulk_save_embeddings(
+        catalog_id: str,
+        embeddings: dict[str, list[float]],
+    ) -> None:
+        """Replace all product embeddings for a catalog.
+
+        Args:
+            catalog_id: The catalog these embeddings belong to.
+            embeddings: Mapping of product_id -> embedding vector (list of floats).
+        """
+        from sqlalchemy import delete, insert
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(DBProductEmbedding).where(
+                    DBProductEmbedding.catalog_id == catalog_id
+                )
+            )
+            if embeddings:
+                rows = [
+                    {
+                        "product_id": product_id,
+                        "catalog_id": catalog_id,
+                        "embedding": embedding,
+                    }
+                    for product_id, embedding in embeddings.items()
+                ]
+                await session.execute(insert(DBProductEmbedding), rows)
+            await session.commit()
 
     @staticmethod
     async def get_common_user_ratings(
