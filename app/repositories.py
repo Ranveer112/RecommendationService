@@ -438,6 +438,29 @@ class CatalogRepository:
             await session.commit()
 
     @staticmethod
+    async def get_all_embeddings(
+        catalog_id: str,
+    ) -> dict[str, list[float]]:
+        """Get all product embeddings for a catalog as product_id -> embedding."""
+        async with AsyncSessionLocal() as session:
+            stmt = select(DBProductEmbedding).where(
+                DBProductEmbedding.catalog_id == catalog_id
+            )
+            result = await session.execute(stmt)
+            return {row.product_id: row.embedding for row in result.scalars().all()}
+
+    @staticmethod
+    async def mark_training_complete(catalog_id: str, trained_count: int) -> None:
+        """After training, set trained_ratings to the count we actually trained on."""
+        async with AsyncSessionLocal() as session:
+            progress = await session.get(DBCatalogTrainingProgress, catalog_id)
+            if progress is None:
+                return
+            progress.trained_ratings = trained_count
+            progress.untrained_ratings = 0
+            await session.commit()
+
+    @staticmethod
     async def get_common_user_ratings(
         catalog_id: str, product_a_id: str, product_b_id: str
     ) -> tuple[list[float], list[float]]:

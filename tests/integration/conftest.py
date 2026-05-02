@@ -42,15 +42,19 @@ async def test_engine():
 async def test_session(test_engine):
     """Override the app's AsyncSessionLocal with a test-scoped session."""
     import app.database as db_module
+    import app.repositories as repo_module
 
     test_session_local = async_sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
     # Patch the session factory used by repositories
-    original = db_module.AsyncSessionLocal
+    original_db = db_module.AsyncSessionLocal
+    original_repo = repo_module.AsyncSessionLocal
     db_module.AsyncSessionLocal = test_session_local
+    repo_module.AsyncSessionLocal = test_session_local
     yield test_session_local
-    db_module.AsyncSessionLocal = original
+    db_module.AsyncSessionLocal = original_db
+    repo_module.AsyncSessionLocal = original_repo
 
     # Clean up all tables between tests
     async with test_engine.begin() as conn:

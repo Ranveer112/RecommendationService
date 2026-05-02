@@ -16,7 +16,7 @@ async def enqueue_retrain_catalog(catalog_id: str) -> None:
     await _retrain_queue.put(catalog_id)
 
 
-async def process_retrain_catalog(catalog_id: str) -> None:
+async def process_retrain_catalog(catalog_id: str) -> list[float]:
     # TODO: implement model retraining for a catalog.
 
     # Fecth all ratings from the db associated with the catalog
@@ -65,27 +65,32 @@ async def process_retrain_catalog(catalog_id: str) -> None:
         lr=0.01,
     )
 
+    epoch_losses: list[float] = []
+
     for epoch in range(EPOCHS):
+        epoch_loss = 0.0
+        num_batches = 0
         for user_batch, product_batch, score_batch in dataloader:
             # Get user embeddings
-            assert user_batch.shape == torch.Size([BATCH_SIZE])
-            assert product_batch.shape == torch.Size([BATCH_SIZE])
-            assert score_batch.shape == torch.Size([BATCH_SIZE])
+            batch_len = user_batch.shape[0]
+            assert user_batch.shape == torch.Size([batch_len])
+            assert product_batch.shape == torch.Size([batch_len])
+            assert score_batch.shape == torch.Size([batch_len])
 
             user_embeddings = get_user_embedding(user_batch)
             product_embeddings = get_product_embedding(product_batch)
             assert (
                 user_embeddings.shape == product_embeddings.shape
-                and user_embeddings.shape == torch.Size([BATCH_SIZE, LATENT_FACTORS])
+                and user_embeddings.shape == torch.Size([batch_len, LATENT_FACTORS])
             )
             user_biases = get_user_bias(user_batch)
             product_biases = get_product_bias(product_batch)
             assert (
                 product_biases.shape == user_biases.shape
-                and user_biases.shape == torch.Size([BATCH_SIZE, 1])
+                and user_biases.shape == torch.Size([batch_len, 1])
             )
             # Compute rating
-            # What we want is a tensor of torch.Size([BATCH_SIZE])
+            # What we want is a tensor of torch.Size([batch_len])
             predicted_ratings = (
                 user_biases.squeeze(dim=1)
                 + product_biases.squeeze(dim=1)
@@ -99,6 +104,11 @@ async def process_retrain_catalog(catalog_id: str) -> None:
             optimizer.step()
             optimizer.zero_grad()
 
+            epoch_loss += loss.item()
+            num_batches += 1
+
+        epoch_losses.append(epoch_loss / num_batches)
+
     # Extract learned product embeddings and save to DB
     index_to_product_id = {idx: pid for pid, idx in product_id_to_index.items()}
     learned_embeddings = get_product_embedding.weight.detach()
@@ -107,6 +117,9 @@ async def process_retrain_catalog(catalog_id: str) -> None:
         for idx in range(len(product_id_to_index))
     }
     await CatalogRepository.bulk_save_embeddings(catalog_id, embeddings_to_save)
+    await CatalogRepository.mark_training_complete(catalog_id, len(ratings))
+
+    return epoch_losses
 
 
 async def retrain_worker() -> None:

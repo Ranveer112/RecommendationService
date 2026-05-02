@@ -265,14 +265,32 @@ async def get_similar_products(
     )
 
     if strategy == SimilarityStrategy.matrix_factorization:
-        # TODO: implement matrix factorization similarity
-
         # For each product, compute it's embedding and find the distance with the given product embedding
         # The metric of distance would be cosine similarity.
-        raise HTTPException(
-            status_code=501,
-            detail="matrix_factorization strategy is not yet implemented",
-        )
+        embeddings = await CatalogRepository.get_all_embeddings(catalogId)
+        anchor_embedding = embeddings.get(productId)
+        if anchor_embedding is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No embedding found for this product. Training may not have completed yet.",
+            )
+
+        similarity_results: list[SimilarityResult] = []
+        for other_product in all_other_products:
+            other_embedding = embeddings.get(other_product.product_id)
+            if other_embedding is None:
+                continue
+            score = cosine_similarity(anchor_embedding, other_embedding)
+            similarity_results.append(
+                SimilarityResult(product_id=other_product.product_id, score=score)
+            )
+
+        similarity_results.sort(key=lambda result: result.score, reverse=True)
+        top_results = similarity_results[:limit]
+        return [
+            Recommendation(productId=result.product_id, score=result.score)
+            for result in top_results
+        ]
 
     use_jaccard = strategy == SimilarityStrategy.jaccard or (
         strategy == SimilarityStrategy.auto
@@ -330,6 +348,22 @@ async def get_similar_products(
         Recommendation(productId=result.product_id, score=result.score)
         for result in top_results
     ]
+
+
+@router.get(
+    "/catalogs/{catalogId}/training-status",
+    dependencies=[Depends(verify_catalog_key)],
+)
+async def get_training_status(catalogId: str) -> dict:
+    """Get training progress for a catalog."""
+    progress = await CatalogRepository.get_training_progress(catalogId)
+    if progress is None:
+        raise HTTPException(status_code=404, detail="Catalog not found")
+    return {
+        "trainedRatings": progress.trained_ratings,
+        "untrainedRatings": progress.untrained_ratings,
+        "isTraining": progress.untrained_ratings > 0 and progress.trained_ratings == 0,
+    }
 
 
 @router.get(

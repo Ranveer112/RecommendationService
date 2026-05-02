@@ -118,6 +118,41 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /catalogs/{catalogId}/training-status:
+    get:
+      summary: Get training status for a catalog
+      security:
+        - catalogKey: []
+      parameters:
+        - $ref: '#/components/parameters/catalogId'
+      responses:
+        '200':
+          description: Current training progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trainedRatings:
+                    type: integer
+                    description: Number of ratings the model was trained on
+                  untrainedRatings:
+                    type: integer
+                    description: Number of ratings received since last training
+                  isTraining:
+                    type: boolean
+                    description: Whether training is currently pending
+                required:
+                  - trainedRatings
+                  - untrainedRatings
+                  - isTraining
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CatalogNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /catalogs/{catalogId}/users/{userId}/recommendations:
     get:
       summary: Get recommendations for a user

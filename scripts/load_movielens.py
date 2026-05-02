@@ -55,7 +55,7 @@ async def fetch_movielens() -> None:
 
 async def load_data() -> tuple[str, str]:
     """Load MovieLens data via API calls."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         # Create catalog
         print("Creating catalog...")
         resp = await client.post(f"{BASE_URL}/catalogs/register")
@@ -169,11 +169,47 @@ async def load_data() -> tuple[str, str]:
         return catalog_id, secret_key
 
 
+async def wait_for_training(
+    catalog_id: str, secret_key: str, timeout: int = 300
+) -> None:
+    """Poll training-status endpoint until training completes (embeddings exist)."""
+    import time
+
+    headers = {"X-Catalog-Key": secret_key}
+    start = time.time()
+    print("\nWaiting for training to complete...")
+
+    async with httpx.AsyncClient() as client:
+        while time.time() - start < timeout:
+            resp = await client.get(
+                f"{BASE_URL}/catalogs/{catalog_id}/training-status",
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                status = resp.json()
+                if status["trainedRatings"] > 0 and status["untrainedRatings"] == 0:
+                    print(
+                        f"Training complete! {status['trainedRatings']} ratings trained."
+                    )
+                    return
+                print(
+                    f"  ...untrained={status['untrainedRatings']}, trained={status['trainedRatings']}",
+                    end="\r",
+                )
+            await asyncio.sleep(2)
+
+    print(f"\nWarning: Training did not complete within {timeout}s timeout.")
+
+
 async def test_similarity(
-    catalog_id: str, secret_key: str, product_id: str = "1", limit: int = 5
+    catalog_id: str,
+    secret_key: str,
+    product_id: str = "1",
+    limit: int = 5,
+    strategy: str = "matrix_factorization",
 ) -> None:
     """Test the similarity endpoint via API calls."""
-    print("\nTesting similarity endpoint...")
+    print(f"\nTesting similarity endpoint (strategy={strategy})...")
 
     async with httpx.AsyncClient() as client:
         sample_product_id = product_id
@@ -182,7 +218,7 @@ async def test_similarity(
             # Test the similarity endpoint
             headers = {"X-Catalog-Key": secret_key}
             resp = await client.get(
-                f"{BASE_URL}/catalogs/{catalog_id}/products/{sample_product_id}/similar?limit={limit}",
+                f"{BASE_URL}/catalogs/{catalog_id}/products/{sample_product_id}/similar?limit={limit}&strategy={strategy}",
                 headers=headers,
             )
             resp.raise_for_status()
@@ -338,7 +374,10 @@ async def main() -> None:
             # Step 2: Load data
             catalog_id, secret_key = await load_data()
 
-            # Step 3: Test similarity
+            # Step 3: Wait for training to complete
+            await wait_for_training(catalog_id, secret_key)
+
+            # Step 4: Test similarity with matrix_factorization strategy
             await test_similarity(catalog_id, secret_key)
 
             print(f"\nDone! Catalog ID: {catalog_id}")
